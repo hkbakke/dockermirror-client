@@ -1,0 +1,88 @@
+#!/usr/bin/env python3
+
+import argparse
+from urllib.request import Request, urlopen
+from urllib.parse import urlencode
+import json
+import time
+import sys
+import logging
+
+
+URL = 'http://dockermirror:5000/api/v1/archive'
+LOGGER = logging.getLogger()
+
+
+def check_status(url):
+    request = Request(url)
+    response = urlopen(request)
+    response_data = json.loads(response.read().decode())
+    return response_data
+
+def mirror_images(images):
+    data = json.dumps({"images": images}).encode('utf-8')
+    headers = {
+        'Content-Type': 'application/json',
+        'Content-Length': len(data),
+    }
+    request = Request(URL, data, headers)
+    response = urlopen(request)
+    response_data = json.loads(response.read().decode())
+    status_url = response.getheader('Location', None)
+    return (response_data, status_url)
+
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--all', '-a', action='store_true', help='save all images in repo')
+    parser.add_argument('--verbose', '-v', action='store_true', help='verbose output')
+    parser.add_argument('--quiet', '-q', action='store_true', help='only output warnings and errors')
+    parser.add_argument('--async', action='store_true', help='do not poll for status')
+    parser.add_argument('images', metavar='IMAGE', nargs='+')
+    args = parser.parse_args()
+
+    if args.verbose:
+        log_level = 'DEBUG'
+    elif args.quiet:
+        log_level = 'WARNING'
+    else:
+        log_level = 'INFO'
+
+    LOGGER.setLevel(log_level)
+    console = logging.StreamHandler()
+    LOGGER.addHandler(console)
+
+    for image in args.images:
+        if not args.all and ':' not in image.split('/')[-1]:
+            image = '%s:latest' % image
+
+        LOGGER.info('Mirroring image %s', image)
+
+        # Run a job for each image although multiple images combined is
+        # supported for diode efficiency
+        response, status_url = mirror_images([image])
+        LOGGER.debug(json.dumps(response, indent=4))
+
+        if not args.async and status_url:
+            prev_status = None
+
+            while True:
+                status = check_status(status_url)
+
+                if status.get('archive'):
+                    LOGGER.info('OK')
+                    return 0
+
+                if status != prev_status:
+                    LOGGER.debug(json.dumps(status, indent=4))
+                    LOGGER.info(status['status'])
+
+                if status.get('status') == 'failed':
+                    LOGGER.error('Error: %s', status['error'])
+                    return 1
+
+                prev_status = status
+                time.sleep(3)
+
+
+if __name__ == '__main__':
+    sys.exit(main())
