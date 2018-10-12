@@ -51,37 +51,37 @@ def main():
     console = logging.StreamHandler()
     LOGGER.addHandler(console)
 
+    images = []
+
     for image in args.images:
         if not args.all and ':' not in image.split('/')[-1]:
             image = '%s:latest' % image
+        images.append(image)
 
-        LOGGER.info('Mirroring image %s...', image)
+    LOGGER.info('Images to mirror: %s', ', '.join(images))
+    response, status_url = mirror_images(images)
+    LOGGER.debug(json.dumps(response, indent=4))
 
-        # Run a job for each image although multiple images combined is
-        # supported for diode efficiency
-        response, status_url = mirror_images([image])
-        LOGGER.debug(json.dumps(response, indent=4))
+    if not args.async and status_url:
+        prev_status = None
 
-        if not args.async and status_url:
-            prev_status = None
+        while True:
+            status = check_status(status_url)
 
-            while True:
-                status = check_status(status_url)
+            if status.get('archive'):
+                LOGGER.info('OK')
+                return 0
 
-                if status.get('archive'):
-                    LOGGER.info('OK')
-                    return 0
+            if status != prev_status:
+                LOGGER.debug(json.dumps(status, indent=4))
+                LOGGER.info(status['status'])
 
-                if status != prev_status:
-                    LOGGER.debug(json.dumps(status, indent=4))
-                    LOGGER.info(status['status'])
+            if status.get('status') == 'failed':
+                LOGGER.error('Error: %s', status['error'])
+                return 1
 
-                if status.get('status') == 'failed':
-                    LOGGER.error('Error: %s', status['error'])
-                    return 1
-
-                prev_status = status
-                time.sleep(3)
+            prev_status = status
+            time.sleep(3)
 
 
 if __name__ == '__main__':
