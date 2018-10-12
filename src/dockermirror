@@ -58,7 +58,7 @@ def main():
             image = '%s:latest' % image
         images.append(image)
 
-    LOGGER.info('Images to mirror: %s', ', '.join(images))
+    LOGGER.info('\nImages to mirror: \n - %s\n', '\n - '.join(images))
     response, status_url = mirror_images(images)
     LOGGER.debug(json.dumps(response, indent=4))
 
