@@ -55,7 +55,7 @@ def main():
         if not args.all and ':' not in image.split('/')[-1]:
             image = '%s:latest' % image
 
-        LOGGER.info('Mirroring image %s', image)
+        LOGGER.info('Mirroring image %s...', image)
 
         # Run a job for each image although multiple images combined is
         # supported for diode efficiency
